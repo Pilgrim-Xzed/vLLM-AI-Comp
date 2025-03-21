@@ -1,0 +1,11 @@
+vllm==0.3.2
+fastapi>=0.108.0
+uvicorn>=0.25.0
+pydantic>=2.5.2
+python-dotenv>=1.0.0
+prometheus_client>=0.18.0
+opentelemetry-api>=1.21.0
+opentelemetry-sdk>=1.21.0
+opentelemetry-exporter-otlp>=1.21.0
+ray>=2.9.0
+pynvml>=11.5.0
