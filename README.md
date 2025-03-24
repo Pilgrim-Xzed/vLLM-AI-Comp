@@ -1,75 +1,121 @@
-# Mistral Inference Server with vLLM
+# Mistral AI Inference Server
 
-A production-grade OpenAI-compatible inference server for hosting Mistral models on 2xH100 GPUs using vLLM.
+A production-ready Mistral AI inference server optimized for 2xH100 GPUs using vLLM. This implementation provides an OpenAI-compatible API for high-throughput, low-latency inferencing.
 
-## Features
+## Architecture
 
-- OpenAI-compatible API endpoints (chat completions, completions)
-- Optimized for high throughput on 2xH100 GPUs
-- Tensorized inference with vLLM for maximum GPU utilization
-- Request batching and continuous batching for efficiency
-- Prometheus metrics for monitoring
-- OpenTelemetry for distributed tracing
-- Paged Attention for memory-efficient inference
-- Health checks and graceful shutdowns
+This project implements a high-performance inference server with the following features:
 
-## Quick Start
+- **Tensor Parallelism**: Optimized for 2xH100 GPUs to maximize throughput
+- **OpenAI-compatible API**: Drop-in replacement for OpenAI API clients
+- **SigNoz Monitoring**: Comprehensive observability with distributed tracing
+- **Production-Ready**: Designed for reliability, scalability, and performance
 
-1. Install dependencies (for local Python development):
-   ```bash
-   pip install -r requirements.txt
-   ```
+### Directory Structure
 
-2. Configure your environment:
-   ```bash
-   cp .env.example .env
-   # Edit .env file with your settings including your Hugging Face token
-   ```
-
-3. Start the server (Python method):
-   ```bash
-   python server.py
-   ```
-
-4. Recommended: For production deployment using official vLLM Docker image:
-   ```bash
-   docker compose up -d
-   ```
-   
-   This uses the official `vllm/vllm-openai:latest` image from Mistral AI with proper configuration.
-
-## API Documentation
-
-Access the API documentation at `http://localhost:8000/docs` after starting the server.
-
-## Configuration
-
-The server can be configured via environment variables or the `.env` file:
-
-- `MODEL_ID`: Hugging Face model ID for Mistral (default: "mistralai/mistral-7b")
-- `GPU_MEMORY_UTILIZATION`: Target GPU memory utilization (default: 0.9)
-- `MAX_MODEL_LEN`: Maximum sequence length (default: 8192)
-- `PORT`: Server port (default: 8000)
-- `HOST`: Server host (default: "0.0.0.0")
-- `TENSOR_PARALLEL_SIZE`: Number of GPUs for tensor parallelism (default: 2 for 2xH100)
-- `HUGGING_FACE_HUB_TOKEN`: Your Hugging Face token for accessing models (required for Docker deployment)
-
-## Docker Deployment
-
-The `docker-compose.yml` uses the official `vllm/vllm-openai:latest` image as recommended by Mistral AI. It's configured for:
-- Tensor parallelism across 2 GPUs
-- Model loading from Hugging Face (requires authentication token)
-- Proper configuration for Mistral models with optimized parameters
-
-To run:
-```bash
-docker compose up -d
+```
+.
+├── app/                      # Application code
+│   ├── api/                  # API endpoints
+│   ├── core/                 # Core model handling 
+│   ├── models/               # Model-specific code
+│   ├── monitoring/           # SigNoz telemetry integration
+│   ├── schemas/              # API schemas
+│   └── utils/                # Utility functions
+├── config/                   # Configuration files
+│   ├── otel-collector-config.yaml  # OpenTelemetry collector config
+│   └── sample.env            # Sample environment variables
+├── scripts/                  # Operational scripts
+│   └── start-server.sh       # Server startup script
+├── tests/                    # Test suite
+├── .env                      # Environment variables (gitignored)
+├── Dockerfile                # Container definition
+├── docker-compose.yml        # Service orchestration
+└── requirements.txt          # Python dependencies
 ```
 
-## Monitoring
+## Technical Specifications
 
-Prometheus metrics are exposed at `/metrics` endpoint.
+- **Model Support**: Mistral AI models (default: Mistral-7B-Instruct-v0.1)
+- **Framework**: vLLM with PyTorch
+- **GPU Requirements**: 2x NVIDIA H100 GPUs
+- **Optimization**: BF16 precision, flash attention, tensor parallelism
+- **Monitoring**: SigNoz (OpenTelemetry)
+- **API**: FastAPI with async endpoints
+
+## Getting Started
+
+### Prerequisites
+
+- Docker and Docker Compose
+- 2x NVIDIA H100 GPUs
+- NVIDIA Docker Runtime
+
+### Configuration
+
+1. Copy the sample environment file:
+   ```
+   cp config/sample.env .env
+   ```
+
+2. Edit the `.env` file to configure your deployment:
+   - Set `MODEL_ID` to your desired Mistral model
+   - Configure `HUGGING_FACE_HUB_TOKEN` if using gated models
+   - Adjust `TENSOR_PARALLEL_SIZE`, `GPU_MEMORY_UTILIZATION` and other parameters as needed
+
+### Deployment
+
+Start the server:
+
+```bash
+docker-compose up -d
+```
+
+The server will be available at http://localhost:8000 with the following endpoints:
+
+- `/v1/chat/completions` - Chat completion API
+- `/v1/completions` - Text completion API
+- `/v1/models` - List available models
+- `/health` - Health check endpoint
+
+## Monitoring with SigNoz
+
+This implementation uses SigNoz for monitoring instead of Prometheus/Grafana. To enable monitoring:
+
+1. Deploy SigNoz following their [official documentation](https://signoz.io/docs/install/)
+2. Configure the OpenTelemetry endpoint in `.env` to point to your SigNoz instance
+3. View traces, metrics, and logs in the SigNoz dashboard
+
+## Performance Optimization
+
+This server is optimized for performance on H100 GPUs:
+
+- Uses tensor parallelism across 2 GPUs
+- Employs BFloat16 precision for optimal performance
+- Utilizes Flash Attention for faster transformer computations
+- Implements efficient batch processing for high throughput
+
+## Client Example
+
+```python
+import requests
+
+url = "http://localhost:8000/v1/chat/completions"
+headers = {"Content-Type": "application/json"}
+data = {
+    "model": "mistralai/Mistral-7B-Instruct-v0.1",
+    "messages": [
+        {"role": "system", "content": "You are a helpful AI assistant."},
+        {"role": "user", "content": "Write a short poem about machine learning."}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 500
+}
+
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
+```
 
 ## License
 
-MIT
+[MIT License](LICENSE)
