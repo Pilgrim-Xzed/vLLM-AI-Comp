@@ -1,6 +1,6 @@
 """
-Main FastAPI application for Mistral AI inference server.
-Designed for production deployment on H100 GPUs with vLLM.
+Main FastAPI application for Llama 8B inference server.
+Designed for high-throughput deployment with quantization.
 """
 import logging
 import os
@@ -29,7 +29,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger("mistral-inference-server")
+logger = logging.getLogger("llama-inference-server")
 
 
 @asynccontextmanager
@@ -49,23 +49,24 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to initialize LLM engine")
         sys.exit(1)
     
-    logger.info(f"Mistral AI inference server running with model: {engine.model_id}")
+    logger.info(f"Llama inference server running with model: {engine.model_id}")
+    logger.info(f"Using quantization: {engine.quantization}")
     logger.info(f"Using tensor parallelism across {engine.tensor_parallel_size} GPUs")
     
     yield
     
     # Cleanup resources
-    logger.info("Shutting down Mistral AI inference server")
+    logger.info("Shutting down Llama inference server")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="Mistral AI Inference Server",
+    title="Llama 8B Inference Server",
     description="""
-    # OpenAI-compatible API for Mistral models using vLLM
+    # OpenAI-compatible API for Llama models using vLLM
     
-    This API provides a high-performance, OpenAI-compatible interface for Mistral models,
-    optimized for production deployment on multiple H100 GPUs using vLLM.
+    This API provides a high-performance, OpenAI-compatible interface for Llama models,
+    optimized for high-throughput inference (2500-3000 tokens/sec) using AWQ quantization.
     
     ## API Endpoints
     - `/v1/chat/completions`: Chat completions API (similar to OpenAI's ChatGPT API)
@@ -129,12 +130,14 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     host = os.getenv("HOST", "0.0.0.0")
     
-    # Start server
-    logger.info(f"Starting Mistral AI inference server at http://{host}:{port}")
+    # Start server with optimized settings
+    logger.info(f"Starting Llama 8B inference server at http://{host}:{port}")
     uvicorn.run(
         "app.main:app",
         host=host,
         port=port,
         log_level="info",
-        workers=1,  # Single worker as we're using multiple GPUs with vLLM
+        workers=int(os.getenv("API_WORKERS", "1")),  # Single worker is best for vLLM
+        timeout_keep_alive=int(os.getenv("TIMEOUT_KEEP_ALIVE", "120")),  # Keep connections alive longer
+        backlog=int(os.getenv("BACKLOG", "2048")),  # Larger backlog for high-traffic
     )

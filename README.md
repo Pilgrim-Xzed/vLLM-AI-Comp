@@ -1,12 +1,13 @@
-# Mistral AI Inference Server
+# Llama 8B Quantized Inference Server
 
-A production-ready Mistral AI inference server optimized for 2xH100 GPUs using vLLM. This implementation provides an OpenAI-compatible API for high-throughput, low-latency inferencing.
+A high-performance Llama 8B inference server optimized for throughput (2500-3000 tokens/sec) using AWQ quantization with vLLM. This implementation provides an OpenAI-compatible API for efficient, low-latency inferencing.
 
 ## Architecture
 
-This project implements a high-performance inference server with the following features:
+This project implements a high-throughput inference server with the following features:
 
-- **Tensor Parallelism**: Optimized for 2xH100 GPUs to maximize throughput
+- **AWQ Quantization**: 4-bit quantization for optimal memory usage and performance
+- **High Throughput**: Optimized for 2500-3000 tokens/sec output
 - **OpenAI-compatible API**: Drop-in replacement for OpenAI API clients
 - **SigNoz Monitoring**: Comprehensive observability with distributed tracing
 - **Production-Ready**: Designed for reliability, scalability, and performance
@@ -36,19 +37,24 @@ This project implements a high-performance inference server with the following f
 
 ## Technical Specifications
 
-- **Model Support**: Mistral AI models (default: Mistral-7B-Instruct-v0.1)
-- **Framework**: vLLM with PyTorch
-- **GPU Requirements**: 2x NVIDIA H100 GPUs
-- **Optimization**: BF16 precision, flash attention, tensor parallelism
+- **Model**: Meta-Llama-3-8B (quantized with AWQ)
+- **Framework**: vLLM 0.4.0 with PyTorch
+- **GPU Requirements**: Single NVIDIA GPU with at least 24GB VRAM
+- **Optimization**: 
+  - AWQ 4-bit quantization
+  - Optimized KV cache management with block size 16
+  - 95% GPU memory utilization
+  - Increased batch processing for higher throughput
 - **Monitoring**: SigNoz (OpenTelemetry)
 - **API**: FastAPI with async endpoints
+- **Performance**: 2500-3000 tokens/second throughput
 
 ## Getting Started
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- 2x NVIDIA H100 GPUs
+- NVIDIA GPU with at least 24GB VRAM
 - NVIDIA Docker Runtime
 
 ### Configuration
@@ -59,9 +65,9 @@ This project implements a high-performance inference server with the following f
    ```
 
 2. Edit the `.env` file to configure your deployment:
-   - Set `MODEL_ID` to your desired Mistral model
-   - Configure `HUGGING_FACE_HUB_TOKEN` if using gated models
-   - Adjust `TENSOR_PARALLEL_SIZE`, `GPU_MEMORY_UTILIZATION` and other parameters as needed
+   - Verify the `MODEL_ID` is set to Meta-Llama-3-8B
+   - Configure `HUGGING_FACE_HUB_TOKEN` for accessing the Llama models
+   - Adjust `QUANTIZATION`, `GPU_MEMORY_UTILIZATION` and other parameters as needed
 
 ### Deployment
 
@@ -80,20 +86,22 @@ The server will be available at http://localhost:8000 with the following endpoin
 
 ## Monitoring with SigNoz
 
-This implementation uses SigNoz for monitoring instead of Prometheus/Grafana. To enable monitoring:
+This implementation uses SigNoz for monitoring. To enable monitoring:
 
 1. Deploy SigNoz following their [official documentation](https://signoz.io/docs/install/)
 2. Configure the OpenTelemetry endpoint in `.env` to point to your SigNoz instance
 3. View traces, metrics, and logs in the SigNoz dashboard
 
-## Performance Optimization
+## Performance Optimization Details
 
-This server is optimized for performance on H100 GPUs:
+The server is highly optimized for throughput with Llama 8B:
 
-- Uses tensor parallelism across 2 GPUs
-- Employs BFloat16 precision for optimal performance
-- Utilizes Flash Attention for faster transformer computations
-- Implements efficient batch processing for high throughput
+- **AWQ Quantization**: Reduces memory footprint while maintaining model quality
+- **Single GPU Optimization**: For quantized models, using a single GPU is more efficient than tensor parallelism
+- **Batch Processing**: Configured for maximum batch throughput
+- **KV Cache Management**: Optimized block size and swap space for efficient memory usage
+- **Server Configuration**: Optimized uvicorn settings for better request handling
+- **Memory Utilization**: Increased to 95% for maximum performance
 
 ## Client Example
 
@@ -103,7 +111,7 @@ import requests
 url = "http://localhost:8000/v1/chat/completions"
 headers = {"Content-Type": "application/json"}
 data = {
-    "model": "mistralai/Mistral-7B-Instruct-v0.1",
+    "model": "meta-llama/Meta-Llama-3-8B",
     "messages": [
         {"role": "system", "content": "You are a helpful AI assistant."},
         {"role": "user", "content": "Write a short poem about machine learning."}

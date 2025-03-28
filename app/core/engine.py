@@ -1,6 +1,6 @@
 """
 Engine module for vLLM model initialization and management.
-Optimized for 2xH100 GPUs in production environments.
+Optimized for high-throughput inference with quantized LLMs.
 """
 import logging
 import os
@@ -9,53 +9,82 @@ from typing import Optional
 from vllm import LLM, SamplingParams
 from vllm.utils import random_uuid
 
-logger = logging.getLogger("mistral-inference-engine")
+logger = logging.getLogger("llama-inference-engine")
 
 
 class ModelEngine:
     """
     Handles vLLM model initialization and inference.
-    Configured for optimal performance on multi-GPU setups.
+    Configured for optimal performance with quantized Llama 8B.
     """
 
     def __init__(self):
         self.llm: Optional[LLM] = None
-        self.model_id = os.getenv("MODEL_ID", "mistralai/Mistral-7B-Instruct-v0.1")
-        # Use 2 for 2xH100 GPUs tensor parallelism
-        self.tensor_parallel_size = int(os.getenv("TENSOR_PARALLEL_SIZE", "2"))
-        # Optimal GPU memory utilization for H100s
-        self.gpu_memory_utilization = float(os.getenv("GPU_MEMORY_UTILIZATION", "0.90"))
+        # Default to Llama 8B
+        self.model_id = os.getenv("MODEL_ID", "meta-llama/Meta-Llama-3-8B")
+        # Use 1 for quantized model (better performance with 1 GPU for quantized models)
+        self.tensor_parallel_size = int(os.getenv("TENSOR_PARALLEL_SIZE", "1"))
+        # Optimal GPU memory utilization for quantized models
+        self.gpu_memory_utilization = float(os.getenv("GPU_MEMORY_UTILIZATION", "0.95"))
+        # Set maximum sequence length
         self.max_model_len = int(os.getenv("MAX_MODEL_LEN", "8192"))
-        # Use bfloat16 for optimal performance on H100 GPUs
-        self.dtype = os.getenv("DTYPE", "bfloat16")
+        # Use quantization for optimal throughput
+        self.quantization = os.getenv("QUANTIZATION", "awq")
+        # Dtype option
+        self.dtype = os.getenv("DTYPE", "half")
         # Additional vLLM parameters for production
         self.trust_remote_code = os.getenv("TRUST_REMOTE_CODE", "true").lower() == "true"
         self.enforce_eager = os.getenv("ENFORCE_EAGER", "false").lower() == "true"
-        # For multi-GPU scheduling
-        self.max_parallel_requests = int(os.getenv("MAX_PARALLEL_REQUESTS", "128"))
-
+        # For batch scheduling optimization
+        self.max_parallel_requests = int(os.getenv("MAX_PARALLEL_REQUESTS", "256"))
+        # KV cache optimization parameters
+        self.block_size = int(os.getenv("BLOCK_SIZE", "16"))
+        self.swap_space = int(os.getenv("SWAP_SPACE", "4"))
+        # Disable cuda graph tracing for quantized models
+        self.disable_traces = os.getenv("DISABLE_TRACES", "true").lower() == "true"
+        
     def initialize(self) -> bool:
         """
-        Initialize the LLM engine with tensor parallelism and optimizations.
+        Initialize the LLM engine with quantization and optimizations.
         Returns True if successful, False otherwise.
         """
         try:
             logger.info(
                 f"Initializing LLM engine with model: {self.model_id}, "
+                f"quantization: {self.quantization}, "
                 f"tensor_parallel_size: {self.tensor_parallel_size}, "
                 f"gpu_memory_utilization: {self.gpu_memory_utilization}, "
-                f"dtype: {self.dtype}"
+                f"max_parallel_requests: {self.max_parallel_requests}"
             )
             
-            self.llm = LLM(
-                model=self.model_id,
-                tensor_parallel_size=self.tensor_parallel_size,
-                gpu_memory_utilization=self.gpu_memory_utilization,
-                max_model_len=self.max_model_len,
-                dtype=self.dtype,
-                trust_remote_code=self.trust_remote_code,
-                enforce_eager=self.enforce_eager,
-            )
+            # Prepare kwargs with base configurations
+            kwargs = {
+                "model": self.model_id,
+                "tensor_parallel_size": self.tensor_parallel_size,
+                "gpu_memory_utilization": self.gpu_memory_utilization,
+                "max_model_len": self.max_model_len,
+                "trust_remote_code": self.trust_remote_code,
+                "enforce_eager": self.enforce_eager,
+                "disable_custom_all_reduce": True,  # Better for quantized models
+                "max_parallel_loading_workers": 4,  # Faster model loading
+                "seed": 42,  # Ensure deterministic results
+                "block_size": self.block_size,  # Optimized KV cache blocking
+                "swap_space": self.swap_space,  # Disk swap for longer contexts
+                "max_num_batched_tokens": 8192,  # Increase batch size for throughput
+                "max_num_seqs": self.max_parallel_requests,  # Higher throughput
+            }
+            
+            # Add quantization-specific parameters
+            if self.quantization.lower() in ["awq", "gptq", "squeezellm"]:
+                kwargs["quantization"] = self.quantization.lower()
+                # For quantized models, use half precision and disable tracing
+                kwargs["dtype"] = "half"
+                kwargs["disable_traces"] = self.disable_traces
+            else:
+                # For non-quantized, use the configured dtype
+                kwargs["dtype"] = self.dtype
+            
+            self.llm = LLM(**kwargs)
             
             logger.info("LLM engine initialized successfully")
             return True
@@ -69,7 +98,7 @@ class ModelEngine:
         """
         return SamplingParams(**kwargs)
 
-    def generate(self, prompt, sampling_params) -> dict:
+    def generate(self, prompt, sampling_params, **kwargs) -> dict:
         """
         Generate text from the LLM based on the prompt and sampling parameters.
         """
@@ -90,5 +119,6 @@ class ModelEngine:
             "id": self.model_id,
             "tensor_parallel_size": self.tensor_parallel_size,
             "max_model_len": self.max_model_len,
+            "quantization": self.quantization,
             "dtype": self.dtype,
         }
